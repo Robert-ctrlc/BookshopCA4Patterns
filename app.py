@@ -69,7 +69,11 @@ def register():
 @app.route('/books')
 def book_list():
     user_id = request.args.get('user_id')
-    sort_by = request.args.get('sort_by', 'title')
+    
+    allowed_sort_fields = ['title', 'price', 'author', 'publisher']
+    if sort_by not in allowed_sort_fields:
+        sort_by = 'title'
+
     search = request.args.get('search', '')
     author = request.args.get('author', '')
     category = request.args.get('category', '')
