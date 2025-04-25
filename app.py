@@ -88,8 +88,8 @@ def book_list():
         query += ' AND author LIKE ?'
         params.append(f'%{author}%')
     if category:
-        query += ' AND category = ?'
-        params.append(category)
+        query += ' AND category LIKE ?'
+        params.append(f'%{category}%')
     if publisher:
         query += ' AND publisher LIKE ?'
         params.append(f'%{publisher}%')   
@@ -245,7 +245,7 @@ def admin_dashboard():
         ORDER BY o.id DESC
     ''').fetchall()
 
-    # 📊 Admin stats
+    
     total_orders = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
     total_books_sold = conn.execute('SELECT SUM(quantity) FROM orders').fetchone()[0] or 0
     total_revenue = conn.execute('''
