@@ -5,6 +5,9 @@
   {% if discount_applied %}
     <p>You received a <strong>10% discount</strong> (−€{{ discount_amount }})</p>
   {% endif %}
+  {% if loyalty_discount > 0 %}
+  <p class="text-success">🎁 A €{{ loyalty_discount }} loyalty discount was applied to your order!</p>
+  {% endif %}
 
   <p>Total Paid: <strong>€{{ total }}</strong></p>
 

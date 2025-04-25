@@ -191,18 +191,33 @@ def checkout():
         discount_amount = round(total * 0.10, 2)
         total -= discount_amount
 
-    
+  
     for book_id, qty in order_items:
         conn.execute('INSERT INTO orders (user_id, book_id, quantity) VALUES (?, ?, ?)',
-                     (user_id, book_id, qty))
-        conn.execute('UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?',
-                     (qty, book_id, qty))
+                 (user_id, book_id, qty))
+    conn.execute('UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?',
+                 (qty, book_id, qty))
+
 
     conn.commit()
+
+    order_count = conn.execute('SELECT COUNT(*) FROM orders WHERE user_id = ?', (user_id,)).fetchone()[0]
+    loyalty_discount = 0
+    if order_count % 3 == 0:
+     loyalty_discount = 5
+    total -= loyalty_discount
+
     conn.close()
 
-    return render_template('checkout_success.html', user_id=user_id, total=total,
-                           discount_applied=discount_applied, discount_amount=discount_amount)
+
+    return render_template(
+    'checkout_success.html',
+    user_id=user_id,
+    total=total,
+    discount_applied=discount_applied,
+    discount_amount=discount_amount,
+    loyalty_discount=loyalty_discount  
+)
 
 
 @app.route('/admin')
