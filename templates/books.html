@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+{% block content %}
+  <h2>Welcome, {{ user['name'] }}!</h2>
+  <p>Sort by: 
+    <a href="{{ url_for('book_list', user_id=user['id'], sort_by='title') }}">Title</a> |
+    <a href="{{ url_for('book_list', user_id=user['id'], sort_by='price') }}">Price</a>
+  </p>
+
+  <div class="row">
+    {% for book in books %}
+      <div class="col-md-4">
+        <div class="card mb-3">
+          <img src="{{ book['image_url'] }}" class="card-img-top" alt="book cover">
+          <div class="card-body">
+            <h5 class="card-title">{{ book['title'] }}</h5>
+            <p class="card-text">Author: {{ book['author'] }}<br>
+               Price: €{{ book['price'] }}</p>
+            <a href="#" class="btn btn-sm btn-outline-primary">Add to Cart</a>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}
