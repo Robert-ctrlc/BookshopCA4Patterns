@@ -83,11 +83,9 @@ def book_list():
     if search:
         query += ' AND title LIKE ?'
         params.append(f'%{search}%')
-
     if author:
         query += ' AND author LIKE ?'
         params.append(f'%{author}%')
-
     if category:
         query += ' AND category = ?'
         params.append(category)
@@ -98,9 +96,22 @@ def book_list():
     
     categories = conn.execute('SELECT DISTINCT category FROM books').fetchall()
 
+    
+    ratings = {
+        row['book_id']: row['avg']
+        for row in conn.execute('SELECT book_id, AVG(rating) AS avg FROM reviews GROUP BY book_id').fetchall()
+    }
+
     conn.close()
 
-    return render_template('books.html', books=books, user=user, categories=categories, filters={
+   
+    books_with_ratings = []
+    for b in books:
+        b = dict(b)
+        b['avg_rating'] = round(ratings.get(b['id'], 0), 1)
+        books_with_ratings.append(b)
+
+    return render_template('books.html', books=books_with_ratings, user=user, categories=categories, filters={
         'search': search,
         'author': author,
         'category': category,
@@ -133,32 +144,66 @@ def cart():
             total += subtotal
             books.append({'book': book, 'qty': qty, 'subtotal': subtotal})
 
+   
+    order_count = conn.execute('SELECT COUNT(*) FROM orders WHERE user_id = ?', (user_id,)).fetchone()[0]
+    orders_to_next_reward = 3 - (order_count % 3)
+    show_loyalty_hint = orders_to_next_reward != 3
+
+    
+    discount_applied = total >= 100
+    discount_amount = round(total * 0.10, 2) if discount_applied else 0
+
     conn.close()
 
-    return render_template('cart.html', user=user, books=books, total=total)
+    return render_template('cart.html',
+        user=user,
+        books=books,
+        total=total,
+        discount_applied=discount_applied,
+        discount_amount=discount_amount,
+        show_loyalty_hint=show_loyalty_hint,
+        orders_to_next_reward=orders_to_next_reward if show_loyalty_hint else None
+    )
+
 
 @app.route('/checkout', methods=['POST'])
 def checkout():
     user_id = request.form.get('user_id')
     conn = get_db_connection()
 
+    total = 0
+    order_items = []
+
     for key, value in request.form.items():
         if key.startswith('book_') and int(value) > 0:
             book_id = int(key.split('_')[1])
             qty = int(value)
+            book = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+            if book:
+                subtotal = qty * book['price']
+                total += subtotal
+                order_items.append((book_id, qty))
 
-           
-            conn.execute('INSERT INTO orders (user_id, book_id, quantity) VALUES (?, ?, ?)',
-                         (user_id, book_id, qty))
+    
+    discount_applied = total >= 100
+    discount_amount = 0
+    if discount_applied:
+        discount_amount = round(total * 0.10, 2)
+        total -= discount_amount
 
-            
-            conn.execute('UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?',
-                         (qty, book_id, qty))
+    
+    for book_id, qty in order_items:
+        conn.execute('INSERT INTO orders (user_id, book_id, quantity) VALUES (?, ?, ?)',
+                     (user_id, book_id, qty))
+        conn.execute('UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?',
+                     (qty, book_id, qty))
 
     conn.commit()
     conn.close()
 
-    return "✅ Purchase complete! <a href='/books?user_id={0}'>Back to Books</a>".format(user_id)
+    return render_template('checkout_success.html', user_id=user_id, total=total,
+                           discount_applied=discount_applied, discount_amount=discount_amount)
+
 
 @app.route('/admin')
 def admin_dashboard():
@@ -286,6 +331,32 @@ def restock_book(book_id):
 @app.route('/logout')
 def logout():
     return redirect(url_for('login'))
+
+@app.route('/book/<int:book_id>', methods=['GET', 'POST'])
+def book_detail(book_id):
+    user_id = request.args.get('user_id')
+
+    conn = get_db_connection()
+    book = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+
+    if request.method == 'POST':
+        rating = int(request.form['rating'])
+        comment = request.form['comment']
+        conn.execute('INSERT INTO reviews (user_id, book_id, rating, comment) VALUES (?, ?, ?, ?)',
+                     (user_id, book_id, rating, comment))
+        conn.commit()
+
+    reviews = conn.execute('''
+        SELECT r.rating, r.comment, u.name FROM reviews r
+        JOIN users u ON r.user_id = u.id
+        WHERE r.book_id = ?
+    ''', (book_id,)).fetchall()
+
+    avg_rating = conn.execute('SELECT AVG(rating) AS avg FROM reviews WHERE book_id = ?', (book_id,)).fetchone()['avg']
+    conn.close()
+
+    return render_template('book_detail.html', book=book, user=user, reviews=reviews, avg_rating=avg_rating)
 
 # ----------------- MAIN ----------------- #
 if __name__ == '__main__':

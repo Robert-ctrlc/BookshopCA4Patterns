@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% block content %}
+  <h2>{{ book['title'] }}</h2>
+  <p>Author: {{ book['author'] }}</p>
+  <p>Price: €{{ book['price'] }}</p>
+  <p>Average Rating: ⭐ {{ "%.1f"|format(avg_rating or 0) }}</p>
+
+  <h4 class="mt-4">Leave a Review</h4>
+  <form method="post">
+    <div class="mb-2">
+      <label>Rating (1-5):</label>
+      <input type="number" name="rating" min="1" max="5" class="form-control" required>
+    </div>
+    <div class="mb-2">
+      <label>Comment:</label>
+      <textarea name="comment" class="form-control" required></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Submit Review</button>
+  </form>
+
+  <h4 class="mt-4">Reviews</h4>
+  {% for r in reviews %}
+    <div class="border rounded p-2 mb-2">
+      <strong>{{ r['name'] }}</strong> rated it ⭐ {{ r['rating'] }}<br>
+      <p>{{ r['comment'] }}</p>
+    </div>
+  {% endfor %}
+
+  <a href="{{ url_for('book_list', user_id=user['id']) }}" class="btn btn-secondary mt-3">Back to Bookstore</a>
+{% endblock %}

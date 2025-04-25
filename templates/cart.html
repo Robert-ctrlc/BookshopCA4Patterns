@@ -14,6 +14,14 @@
       {% endfor %}
     </ul>
     <h4>Total: €{{ total }}</h4>
+    {% if discount_applied %}
+  <p class="text-success">💸 A 10% discount will be applied at checkout (−€{{ discount_amount }})</p>
+{% endif %}
+
+{% if show_loyalty_hint %}
+  <p class="text-info">🎁 You're {{ orders_to_next_reward }} order{{ 's' if orders_to_next_reward > 1 else '' }} away from a €5 loyalty reward!</p>
+{% endif %}
+
     <button type="submit" class="btn btn-primary">Checkout</button>
   </form>
 

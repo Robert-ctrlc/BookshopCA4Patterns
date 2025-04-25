@@ -51,9 +51,14 @@
                 Author: {{ book['author'] }}<br>
                 Category: {{ book['category'] }}<br>
                 Price: €{{ book['price'] }}<br>
-                In stock: {{ book['stock'] }}
+                In stock: {{ book['stock'] }}<br>
+                Rating: ⭐ {{ "%.1f"|format(book['avg_rating'] or 0.0) }}
               </p>
-              <input type="number" name="book_{{ book['id'] }}" class="form-control mb-2" placeholder="Qty" min="0" max="{{ book['stock'] }}">
+  
+              <div class="d-flex justify-content-between align-items-center">
+                <input type="number" name="book_{{ book['id'] }}" class="form-control me-2" placeholder="Qty" min="0" max="{{ book['stock'] }}">
+                <a href="{{ url_for('book_detail', book_id=book['id'], user_id=user['id']) }}" class="btn btn-sm btn-outline-info">View Details</a>
+              </div>
             </div>
           </div>
         </div>

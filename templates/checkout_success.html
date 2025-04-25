@@ -1,0 +1,12 @@
+{% extends "layout.html" %}
+{% block content %}
+  <h2>✅ Purchase Successful</h2>
+
+  {% if discount_applied %}
+    <p>You received a <strong>10% discount</strong> (−€{{ discount_amount }})</p>
+  {% endif %}
+
+  <p>Total Paid: <strong>€{{ total }}</strong></p>
+
+  <a href="{{ url_for('book_list', user_id=user_id) }}" class="btn btn-primary mt-3">Back to Store</a>
+{% endblock %}
