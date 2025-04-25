@@ -45,6 +45,8 @@ def register():
         username = request.form['username']
         password = request.form['password']
         confirm = request.form['confirm']
+        address = request.form['address']
+        payment_method = request.form['payment_method']
         is_admin = 1 if request.form.get('is_admin') == 'on' else 0
 
         conn = get_db_connection()
@@ -55,8 +57,8 @@ def register():
         elif password != confirm:
             error = "Passwords do not match."
         else:
-            conn.execute('INSERT INTO users (name, password, is_admin) VALUES (?, ?, ?)', 
-                         (username, password, is_admin))
+            conn.execute("INSERT INTO users (name, password, is_admin, address, payment_method) VALUES (?, ?, ?, ?, ?)",
+                         (username, password, is_admin, address, payment_method))
             conn.commit()
             success = "Account created! Please log in."
         
@@ -181,6 +183,56 @@ def admin_dashboard():
     conn.close()
     return render_template('admin.html', user=user, books=books, users=users, orders=orders)
 
+@app.route('/admin/add_book', methods=['GET', 'POST'])
+def add_book():
+    user_id = request.args.get('user_id')
+    if request.method == 'POST':
+        data = request.form
+        conn = get_db_connection()
+        conn.execute('''
+            INSERT INTO books (title, author, publisher, price, category, isbn, stock, image_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data['title'], data['author'], data['publisher'],
+            data['price'], data['category'], data['isbn'],
+            data['stock'], data['image_url']
+        ))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('admin_dashboard', user_id=user_id))
+    return render_template('book_form.html', user_id=user_id, action='Add')
+
+@app.route('/admin/edit_book/<int:book_id>', methods=['GET', 'POST'])
+def edit_book(book_id):
+    user_id = request.args.get('user_id')
+    conn = get_db_connection()
+    if request.method == 'POST':
+        data = request.form
+        conn.execute('''
+            UPDATE books SET title=?, author=?, publisher=?, price=?, category=?, isbn=?, stock=?, image_url=?
+            WHERE id=?
+        ''', (
+            data['title'], data['author'], data['publisher'],
+            data['price'], data['category'], data['isbn'],
+            data['stock'], data['image_url'], book_id
+        ))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('admin_dashboard', user_id=user_id))
+
+    book = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+    conn.close()
+    return render_template('book_form.html', book=book, user_id=user_id, action='Edit')
+
+@app.route('/admin/delete_book/<int:book_id>')
+def delete_book(book_id):
+    user_id = request.args.get('user_id')
+    conn = get_db_connection()
+    conn.execute('DELETE FROM books WHERE id = ?', (book_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_dashboard', user_id=user_id))
+
 @app.route('/orders')
 def order_history():
     user_id = request.args.get('user_id')
@@ -202,6 +254,22 @@ def order_history():
 
     conn.close()
     return render_template('orders.html', user=user, orders=orders)
+
+@app.route('/profile', methods=['GET', 'POST'])
+def profile():
+    user_id = request.args.get('user_id')
+    conn = get_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+
+    if request.method == 'POST':
+        address = request.form['address']
+        payment = request.form['payment_method']
+        conn.execute('UPDATE users SET address = ?, payment_method = ? WHERE id = ?', (address, payment, user_id))
+        conn.commit()
+        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+
+    conn.close()
+    return render_template('profile.html', user=user)
 
 # ----------------- MAIN ----------------- #
 if __name__ == '__main__':

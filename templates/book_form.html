@@ -1,0 +1,17 @@
+{% extends "layout.html" %}
+{% block content %}
+  <h2>{{ action }} Book</h2>
+
+  <form method="post">
+    <div class="mb-3"><input type="text" class="form-control" name="title" placeholder="Title" required value="{{ book.title if book else '' }}"></div>
+    <div class="mb-3"><input type="text" class="form-control" name="author" placeholder="Author" required value="{{ book.author if book else '' }}"></div>
+    <div class="mb-3"><input type="text" class="form-control" name="publisher" placeholder="Publisher" required value="{{ book.publisher if book else '' }}"></div>
+    <div class="mb-3"><input type="number" class="form-control" name="price" placeholder="Price" step="0.01" required value="{{ book.price if book else '' }}"></div>
+    <div class="mb-3"><input type="text" class="form-control" name="category" placeholder="Category" required value="{{ book.category if book else '' }}"></div>
+    <div class="mb-3"><input type="text" class="form-control" name="isbn" placeholder="ISBN" required value="{{ book.isbn if book else '' }}"></div>
+    <div class="mb-3"><input type="number" class="form-control" name="stock" placeholder="Stock" required value="{{ book.stock if book else '' }}"></div>
+    <div class="mb-3"><input type="text" class="form-control" name="image_url" placeholder="Image URL" required value="{{ book.image_url if book else '' }}"></div>
+    <button type="submit" class="btn btn-success">{{ action }} Book</button>
+    <a href="{{ url_for('admin_dashboard', user_id=user_id) }}" class="btn btn-secondary">Cancel</a>
+  </form>
+{% endblock %}

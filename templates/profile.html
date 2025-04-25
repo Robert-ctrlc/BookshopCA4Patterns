@@ -1,0 +1,20 @@
+{% extends "layout.html" %}
+{% block content %}
+  <h2>My Profile</h2>
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-control" value="{{ user['name'] }}" readonly>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Shipping Address</label>
+      <input type="text" class="form-control" name="address" value="{{ user['address'] }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Payment Method</label>
+      <input type="text" class="form-control" name="payment_method" value="{{ user['payment_method'] }}">
+    </div>
+    <button type="submit" class="btn btn-primary">Update Profile</button>
+    <a href="{{ url_for('book_list', user_id=user['id']) }}" class="btn btn-secondary">Back</a>
+  </form>
+{% endblock %}
