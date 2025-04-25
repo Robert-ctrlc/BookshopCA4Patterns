@@ -1,18 +1,15 @@
 from flask import Flask, render_template, request, redirect, url_for
 from factories import BookFactory, UserFactory
 from strategies import TitleSortStrategy, PriceSortStrategy, AuthorSortStrategy, PublisherSortStrategy
-
+from dao import BookDAO, UserDAO
 import sqlite3
 
 app = Flask(__name__)
 
-# ----------------- DATABASE CONNECTION ----------------- #
 def get_db_connection():
     conn = sqlite3.connect('books.db')
     conn.row_factory = sqlite3.Row
     return conn
-
-# ----------------- ROUTES ----------------- #
 
 @app.route('/')
 def home():
@@ -26,13 +23,12 @@ def login():
         password = request.form['password']
 
         conn = get_db_connection()
-        row = conn.execute('SELECT * FROM users WHERE name = ? AND password = ?', (username, password)).fetchone()
-        user = UserFactory.create_user_from_row(row) if row else None
-
+        user_dao = UserDAO(conn)
+        user = user_dao.get_user_by_credentials(username, password)
         conn.close()
 
         if user:
-            return redirect(url_for('book_list', user_id=user['id']))
+            return redirect(url_for('book_list', user_id=user.id))
         else:
             error = "Invalid username or password."
 
@@ -42,7 +38,6 @@ def login():
 def register():
     error = None
     success = None
-
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -59,11 +54,12 @@ def register():
         elif password != confirm:
             error = "Passwords do not match."
         else:
-            conn.execute("INSERT INTO users (name, password, is_admin, address, payment_method) VALUES (?, ?, ?, ?, ?)",
-                         (username, password, is_admin, address, payment_method))
+            conn.execute(
+                "INSERT INTO users (name, password, is_admin, address, payment_method) VALUES (?, ?, ?, ?, ?)",
+                (username, password, is_admin, address, payment_method)
+            )
             conn.commit()
             success = "Account created! Please log in."
-        
         conn.close()
 
     return render_template('register.html', error=error, success=success)
@@ -72,31 +68,14 @@ def register():
 def book_list():
     user_id = request.args.get('user_id')
     sort_by = request.args.get('sort_by', 'title')
-
     search = request.args.get('search', '')
     author = request.args.get('author', '')
     category = request.args.get('category', '')
     publisher = request.args.get('publisher', '')
 
     conn = get_db_connection()
-    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-    user = UserFactory.create_user_from_row(row) if row else None
-
-    query = 'SELECT * FROM books WHERE 1=1'
-    params = []
-
-    if search:
-        query += ' AND title LIKE ?'
-        params.append(f'%{search}%')
-    if author:
-        query += ' AND author LIKE ?'
-        params.append(f'%{author}%')
-    if category:
-        query += ' AND category LIKE ?'
-        params.append(f'%{category}%')
-    if publisher:
-        query += ' AND publisher LIKE ?'
-        params.append(f'%{publisher}%')
+    user_dao = UserDAO(conn)
+    user = user_dao.get_user_by_id(user_id)
 
     strategies = {
         'title': TitleSortStrategy(),
@@ -104,12 +83,11 @@ def book_list():
         'author': AuthorSortStrategy(),
         'publisher': PublisherSortStrategy()
     }
-
     sort_strategy = strategies.get(sort_by, TitleSortStrategy())
-    query += f' {sort_strategy.sort_query()}'
 
-    rows = conn.execute(query, params).fetchall()
-    categories = conn.execute('SELECT DISTINCT category FROM books').fetchall()
+    book_dao = BookDAO(conn)
+    books = book_dao.get_all_books(search, author, category, publisher, sort_strategy)
+    categories = book_dao.get_categories()
 
     ratings = {
         row['book_id']: row['avg']
@@ -119,8 +97,8 @@ def book_list():
     conn.close()
 
     books_with_ratings = []
-    for b in rows:
-        b = dict(b)
+    for b in books:
+        b = b.__dict__
         b['avg_rating'] = round(ratings.get(b['id'], 0), 1)
         books_with_ratings.append(b)
 
@@ -147,26 +125,25 @@ def cart():
         return "No books selected. <a href='/books?user_id={0}'>Go back</a>".format(user_id)
 
     conn = get_db_connection()
-    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-    user = UserFactory.create_user_from_row(row) if row else None
+    user_dao = UserDAO(conn)
+    user = user_dao.get_user_by_id(user_id)
 
     books = []
     total = 0
 
     for book_id, qty in cart_items:
-        row = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
-        book = BookFactory.create_book_from_row(row)
+        book = BookFactory.create_book_from_row(
+            conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+        )
         if book:
-            subtotal = qty * book['price']
+            subtotal = qty * book.price
             total += subtotal
             books.append({'book': book, 'qty': qty, 'subtotal': subtotal})
 
-   
     order_count = conn.execute('SELECT COUNT(*) FROM orders WHERE user_id = ?', (user_id,)).fetchone()[0]
     orders_to_next_reward = 3 - (order_count % 3)
     show_loyalty_hint = orders_to_next_reward != 3
 
-    
     discount_applied = total >= 100
     discount_amount = round(total * 0.10, 2) if discount_applied else 0
 
@@ -182,7 +159,6 @@ def cart():
         orders_to_next_reward=orders_to_next_reward if show_loyalty_hint else None
     )
 
-
 @app.route('/checkout', methods=['POST'])
 def checkout():
     user_id = request.form.get('user_id')
@@ -195,58 +171,50 @@ def checkout():
         if key.startswith('book_') and int(value) > 0:
             book_id = int(key.split('_')[1])
             qty = int(value)
-            row = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
-            book = BookFactory.create_book_from_row(row)
+            book = BookFactory.create_book_from_row(
+                conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+            )
             if book:
-                subtotal = qty * book['price']
+                subtotal = qty * book.price
                 total += subtotal
                 order_items.append((book_id, qty))
 
-    
     discount_applied = total >= 100
     discount_amount = 0
     if discount_applied:
         discount_amount = round(total * 0.10, 2)
         total -= discount_amount
 
-  
     for book_id, qty in order_items:
-        conn.execute('INSERT INTO orders (user_id, book_id, quantity) VALUES (?, ?, ?)',
-                 (user_id, book_id, qty))
-    conn.execute('UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?',
-                 (qty, book_id, qty))
-
+        conn.execute('INSERT INTO orders (user_id, book_id, quantity) VALUES (?, ?, ?)', (user_id, book_id, qty))
+        conn.execute('UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?', (qty, book_id, qty))
 
     conn.commit()
 
     order_count = conn.execute('SELECT COUNT(*) FROM orders WHERE user_id = ?', (user_id,)).fetchone()[0]
     loyalty_discount = 0
     if order_count % 3 == 0:
-     loyalty_discount = 5
+        loyalty_discount = 5
     total -= loyalty_discount
 
     conn.close()
 
-
-    return render_template(
-    'checkout_success.html',
-    user_id=user_id,
-    total=total,
-    discount_applied=discount_applied,
-    discount_amount=discount_amount,
-    loyalty_discount=loyalty_discount  
-)
-
+    return render_template('checkout_success.html',
+        user_id=user_id,
+        total=total,
+        discount_applied=discount_applied,
+        discount_amount=discount_amount,
+        loyalty_discount=loyalty_discount
+    )
 
 @app.route('/admin')
 def admin_dashboard():
     user_id = request.args.get('user_id')
     conn = get_db_connection()
-    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-    user = UserFactory.create_user_from_row(row) if row else None
+    user_dao = UserDAO(conn)
+    user = user_dao.get_user_by_id(user_id)
 
-
-    if not user or user['is_admin'] != 1:
+    if not user or not user.is_admin:
         conn.close()
         return "Access denied."
 
@@ -260,14 +228,9 @@ def admin_dashboard():
         ORDER BY o.id DESC
     ''').fetchall()
 
-    
     total_orders = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
     total_books_sold = conn.execute('SELECT SUM(quantity) FROM orders').fetchone()[0] or 0
-    total_revenue = conn.execute('''
-        SELECT SUM(o.quantity * b.price)
-        FROM orders o
-        JOIN books b ON o.book_id = b.id
-    ''').fetchone()[0] or 0
+    total_revenue = conn.execute('SELECT SUM(o.quantity * b.price) FROM orders o JOIN books b ON o.book_id = b.id').fetchone()[0] or 0
     total_users = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
     avg_rating = conn.execute('SELECT AVG(rating) FROM reviews').fetchone()[0] or 0
 
@@ -283,17 +246,17 @@ def admin_dashboard():
     conn.close()
 
     return render_template('admin.html',
-                           user=user,
-                           books=books,
-                           users=users,
-                           orders=orders,
-                           total_orders=total_orders,
-                           total_books_sold=total_books_sold,
-                           total_revenue=round(total_revenue, 2),
-                           total_users=total_users,
-                           avg_rating=round(avg_rating, 1),
-                           best_seller=best_seller)
-
+        user=user,
+        books=books,
+        users=users,
+        orders=orders,
+        total_orders=total_orders,
+        total_books_sold=total_books_sold,
+        total_revenue=round(total_revenue, 2),
+        total_users=total_users,
+        avg_rating=round(avg_rating, 1),
+        best_seller=best_seller
+    )
 
 @app.route('/admin/add_book', methods=['GET', 'POST'])
 def add_book():
@@ -350,10 +313,8 @@ def delete_book(book_id):
 def order_history():
     user_id = request.args.get('user_id')
     conn = get_db_connection()
-
-    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-    user = UserFactory.create_user_from_row(row) if row else None
-
+    user_dao = UserDAO(conn)
+    user = user_dao.get_user_by_id(user_id)
 
     if not user:
         conn.close()
@@ -374,18 +335,15 @@ def order_history():
 def profile():
     user_id = request.args.get('user_id')
     conn = get_db_connection()
-    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-    user = UserFactory.create_user_from_row(row) if row else None
-
+    user_dao = UserDAO(conn)
+    user = user_dao.get_user_by_id(user_id)
 
     if request.method == 'POST':
         address = request.form['address']
         payment = request.form['payment_method']
         conn.execute('UPDATE users SET address = ?, payment_method = ? WHERE id = ?', (address, payment, user_id))
         conn.commit()
-        row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-        user = UserFactory.create_user_from_row(row) if row else None
-
+        user = user_dao.get_user_by_id(user_id)
 
     conn.close()
     return render_template('profile.html', user=user)
@@ -409,13 +367,14 @@ def logout():
 @app.route('/book/<int:book_id>', methods=['GET', 'POST'])
 def book_detail(book_id):
     user_id = request.args.get('user_id')
-
     conn = get_db_connection()
-    row = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
-    book = BookFactory.create_book_from_row(row)    
-    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-    user = UserFactory.create_user_from_row(row) if row else None
 
+    book = BookFactory.create_book_from_row(
+        conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+    )
+
+    user_dao = UserDAO(conn)
+    user = user_dao.get_user_by_id(user_id)
 
     if request.method == 'POST':
         rating = int(request.form['rating'])
@@ -435,6 +394,5 @@ def book_detail(book_id):
 
     return render_template('book_detail.html', book=book, user=user, reviews=reviews, avg_rating=avg_rating)
 
-# ----------------- MAIN ----------------- #
 if __name__ == '__main__':
     app.run(debug=True)
