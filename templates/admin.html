@@ -4,6 +4,68 @@
   <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
   <h4>Books</h4>
   <a href="{{ url_for('add_book', user_id=user['id']) }}" class="btn btn-success mb-2">Add New Book</a>
+
+  <h3>📊 Admin Stats</h3>
+<div class="row mb-4">
+  <div class="col-md-4">
+    <div class="card border-primary">
+      <div class="card-body">
+        <h5 class="card-title">Total Orders</h5>
+        <p class="card-text display-6">{{ total_orders }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-success">
+      <div class="card-body">
+        <h5 class="card-title">Books Sold</h5>
+        <p class="card-text display-6">{{ total_books_sold }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-warning">
+      <div class="card-body">
+        <h5 class="card-title">Revenue (€)</h5>
+        <p class="card-text display-6">€{{ total_revenue }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row mb-4">
+  <div class="col-md-4">
+    <div class="card border-info">
+      <div class="card-body">
+        <h5 class="card-title">Registered Users</h5>
+        <p class="card-text display-6">{{ total_users }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-secondary">
+      <div class="card-body">
+        <h5 class="card-title">Avg Rating</h5>
+        <p class="card-text display-6">⭐ {{ avg_rating }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-danger">
+      <div class="card-body">
+        <h5 class="card-title">Best Seller</h5>
+        {% if best_seller %}
+          <p class="card-text">
+            <strong>{{ best_seller['title'] }}</strong><br>
+            Sold: {{ best_seller['sold'] }}
+          </p>
+        {% else %}
+          <p class="card-text">No sales yet</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
 <table class="table table-striped">
   <thead>
     <tr><th>ID</th><th>Title</th><th>Stock</th><th>Actions</th></tr>

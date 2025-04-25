@@ -240,8 +240,40 @@ def admin_dashboard():
         ORDER BY o.id DESC
     ''').fetchall()
 
+    # 📊 Admin stats
+    total_orders = conn.execute('SELECT COUNT(*) FROM orders').fetchone()[0]
+    total_books_sold = conn.execute('SELECT SUM(quantity) FROM orders').fetchone()[0] or 0
+    total_revenue = conn.execute('''
+        SELECT SUM(o.quantity * b.price)
+        FROM orders o
+        JOIN books b ON o.book_id = b.id
+    ''').fetchone()[0] or 0
+    total_users = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+    avg_rating = conn.execute('SELECT AVG(rating) FROM reviews').fetchone()[0] or 0
+
+    best_seller = conn.execute('''
+        SELECT b.title, SUM(o.quantity) AS sold
+        FROM orders o
+        JOIN books b ON o.book_id = b.id
+        GROUP BY o.book_id
+        ORDER BY sold DESC
+        LIMIT 1
+    ''').fetchone()
+
     conn.close()
-    return render_template('admin.html', user=user, books=books, users=users, orders=orders)
+
+    return render_template('admin.html',
+                           user=user,
+                           books=books,
+                           users=users,
+                           orders=orders,
+                           total_orders=total_orders,
+                           total_books_sold=total_books_sold,
+                           total_revenue=round(total_revenue, 2),
+                           total_users=total_users,
+                           avg_rating=round(avg_rating, 1),
+                           best_seller=best_seller)
+
 
 @app.route('/admin/add_book', methods=['GET', 'POST'])
 def add_book():
