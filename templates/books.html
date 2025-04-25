@@ -1,13 +1,14 @@
 {% extends "layout.html" %}
 {% block content %}
   <h2>Welcome, {{ user['name'] }}!</h2>
-
-  <a href="{{ url_for('profile', user_id=user['id']) }}" class="btn btn-outline-info mb-3">My Profile</a>
-  <a href="{{ url_for('order_history', user_id=user['id']) }}" class="btn btn-outline-secondary mb-3">My Orders</a>
-
-  {% if user['is_admin'] %}
-    <a class="btn btn-warning mb-3" href="{{ url_for('admin_dashboard', user_id=user['id']) }}">Admin Dashboard</a>
-  {% endif %}
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
+    <a href="{{ url_for('profile', user_id=user['id']) }}" class="btn btn-info text-white">My Profile</a>
+    <a href="{{ url_for('order_history', user_id=user['id']) }}" class="btn btn-outline-secondary">My Orders</a>
+    {% if user['is_admin'] %}
+      <a class="btn btn-warning" href="{{ url_for('admin_dashboard', user_id=user['id']) }}">Admin Dashboard</a>
+    {% endif %}
+  </div>
 
   <form method="get" action="{{ url_for('book_list') }}" class="row g-2 mb-4">
     <input type="hidden" name="user_id" value="{{ user['id'] }}">

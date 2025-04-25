@@ -271,6 +271,22 @@ def profile():
     conn.close()
     return render_template('profile.html', user=user)
 
+@app.route('/admin/restock/<int:book_id>', methods=['POST'])
+def restock_book(book_id):
+    user_id = request.form['user_id']
+    amount = int(request.form['amount'])
+
+    conn = get_db_connection()
+    conn.execute('UPDATE books SET stock = stock + ? WHERE id = ?', (amount, book_id))
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for('admin_dashboard', user_id=user_id))
+
+@app.route('/logout')
+def logout():
+    return redirect(url_for('login'))
+
 # ----------------- MAIN ----------------- #
 if __name__ == '__main__':
     app.run(debug=True)
