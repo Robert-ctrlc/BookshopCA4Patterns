@@ -52,13 +52,13 @@
           <div class="card mb-3">
             <img src="{{ book['image_url'] }}" class="card-img-top" alt="book cover">
             <div class="card-body">
-              <h5 class="card-title">{{ book['title'] }}</h5>
+              <h5 class="card-title">{{ book.title }}</h5>
               <p class="card-text">
-                Author: {{ book['author'] }}<br>
-                Category: {{ book['category'] }}<br>
-                Price: €{{ book['price'] }}<br>
-                In stock: {{ book['stock'] }}<br>
-                Rating: ⭐ {{ "%.1f"|format(book['avg_rating'] or 0.0) }}
+                Author: {{ book.author }}<br>
+                Category: {{ book.category }}<br>
+                Price: €{{ book.price }}<br>
+                In stock: {{ book.stock }}<br>
+                Rating: ⭐ {{ "%.1f"|format(book.avg_rating or 0.0) }}
               </p>
   
               <div class="d-flex justify-content-between align-items-center">

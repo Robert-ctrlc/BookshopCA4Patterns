@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for
+from factories import BookFactory, UserFactory
 import sqlite3
 
 app = Flask(__name__)
@@ -23,10 +24,9 @@ def login():
         password = request.form['password']
 
         conn = get_db_connection()
-        user = conn.execute(
-            'SELECT * FROM users WHERE name = ? AND password = ?', 
-            (username, password)
-        ).fetchone()
+        row = conn.execute('SELECT * FROM users WHERE name = ? AND password = ?', (username, password)).fetchone()
+        user = UserFactory.create_user_from_row(row) if row else None
+
         conn.close()
 
         if user:
@@ -69,7 +69,7 @@ def register():
 @app.route('/books')
 def book_list():
     user_id = request.args.get('user_id')
-    
+
     allowed_sort_fields = ['title', 'price', 'author', 'publisher']
     if sort_by not in allowed_sort_fields:
         sort_by = 'title'
@@ -80,7 +80,9 @@ def book_list():
     publisher = request.args.get('publisher', '')
 
     conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    user = UserFactory.create_user_from_row(row) if row else None
+
 
     query = 'SELECT * FROM books WHERE 1=1'
     params = []
@@ -142,12 +144,15 @@ def cart():
         return "No books selected. <a href='/books?user_id={0}'>Go back</a>".format(user_id)
 
     conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    user = UserFactory.create_user_from_row(row) if row else None
+
     books = []
     total = 0
 
     for book_id, qty in cart_items:
-        book = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+        row = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+        book = BookFactory.create_book_from_row(row)
         if book:
             subtotal = qty * book['price']
             total += subtotal
@@ -187,7 +192,8 @@ def checkout():
         if key.startswith('book_') and int(value) > 0:
             book_id = int(key.split('_')[1])
             qty = int(value)
-            book = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+            row = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+            book = BookFactory.create_book_from_row(row)
             if book:
                 subtotal = qty * book['price']
                 total += subtotal
@@ -233,7 +239,9 @@ def checkout():
 def admin_dashboard():
     user_id = request.args.get('user_id')
     conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    user = UserFactory.create_user_from_row(row) if row else None
+
 
     if not user or user['is_admin'] != 1:
         conn.close()
@@ -321,7 +329,8 @@ def edit_book(book_id):
         conn.close()
         return redirect(url_for('admin_dashboard', user_id=user_id))
 
-    book = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+    row = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+    book = BookFactory.create_book_from_row(row)
     conn.close()
     return render_template('book_form.html', book=book, user_id=user_id, action='Edit')
 
@@ -339,7 +348,9 @@ def order_history():
     user_id = request.args.get('user_id')
     conn = get_db_connection()
 
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    user = UserFactory.create_user_from_row(row) if row else None
+
 
     if not user:
         conn.close()
@@ -360,14 +371,18 @@ def order_history():
 def profile():
     user_id = request.args.get('user_id')
     conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    user = UserFactory.create_user_from_row(row) if row else None
+
 
     if request.method == 'POST':
         address = request.form['address']
         payment = request.form['payment_method']
         conn.execute('UPDATE users SET address = ?, payment_method = ? WHERE id = ?', (address, payment, user_id))
         conn.commit()
-        user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        user = UserFactory.create_user_from_row(row) if row else None
+
 
     conn.close()
     return render_template('profile.html', user=user)
@@ -393,8 +408,11 @@ def book_detail(book_id):
     user_id = request.args.get('user_id')
 
     conn = get_db_connection()
-    book = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    row = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+    book = BookFactory.create_book_from_row(row)    
+    row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    user = UserFactory.create_user_from_row(row) if row else None
+
 
     if request.method == 'POST':
         rating = int(request.form['rating'])
