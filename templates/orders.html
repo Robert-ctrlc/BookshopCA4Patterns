@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+{% block content %}
+  <h2>Order History for {{ user['name'] }}</h2>
+
+  {% if orders %}
+    <table class="table table-striped">
+      <thead><tr><th>Order ID</th><th>Book</th><th>Quantity</th><th>Total (€)</th></tr></thead>
+      <tbody>
+        {% for o in orders %}
+          <tr>
+            <td>{{ o['id'] }}</td>
+            <td>{{ o['title'] }}</td>
+            <td>{{ o['quantity'] }}</td>
+            <td>{{ "%.2f"|format(o['total']) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No orders yet.</p>
+  {% endif %}
+
+  <a href="{{ url_for('book_list', user_id=user['id']) }}" class="btn btn-secondary mt-3">Back to Bookstore</a>
+{% endblock %}

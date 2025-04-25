@@ -1,21 +1,20 @@
-# app.py
 from flask import Flask, render_template, request, redirect, url_for
 import sqlite3
 
 app = Flask(__name__)
 
-# Helper: connect to database
+# ----------------- DATABASE CONNECTION ----------------- #
 def get_db_connection():
     conn = sqlite3.connect('books.db')
     conn.row_factory = sqlite3.Row
     return conn
 
-# Home redirect to login
+# ----------------- ROUTES ----------------- #
+
 @app.route('/')
 def home():
     return redirect(url_for('login'))
 
-# Login page + auth
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
@@ -36,19 +35,6 @@ def login():
             error = "Invalid username or password."
 
     return render_template('login.html', error=error)
-
-# View books (with optional sorting)
-@app.route('/books')
-def book_list():
-    user_id = request.args.get('user_id')
-    sort_by = request.args.get('sort_by', 'title')
-
-    conn = get_db_connection()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-    books = conn.execute(f'SELECT * FROM books ORDER BY {sort_by} ASC').fetchall()
-    conn.close()
-
-    return render_template('books.html', books=books, user=user)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -77,3 +63,146 @@ def register():
         conn.close()
 
     return render_template('register.html', error=error, success=success)
+
+@app.route('/books')
+def book_list():
+    user_id = request.args.get('user_id')
+    sort_by = request.args.get('sort_by', 'title')
+    search = request.args.get('search', '')
+    author = request.args.get('author', '')
+    category = request.args.get('category', '')
+
+    conn = get_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+
+    query = 'SELECT * FROM books WHERE 1=1'
+    params = []
+
+    if search:
+        query += ' AND title LIKE ?'
+        params.append(f'%{search}%')
+
+    if author:
+        query += ' AND author LIKE ?'
+        params.append(f'%{author}%')
+
+    if category:
+        query += ' AND category = ?'
+        params.append(category)
+
+    query += f' ORDER BY {sort_by} ASC'
+    books = conn.execute(query, params).fetchall()
+
+    
+    categories = conn.execute('SELECT DISTINCT category FROM books').fetchall()
+
+    conn.close()
+
+    return render_template('books.html', books=books, user=user, categories=categories, filters={
+        'search': search,
+        'author': author,
+        'category': category,
+        'sort_by': sort_by
+    })
+
+@app.route('/cart', methods=['POST'])
+def cart():
+    user_id = request.form.get('user_id')
+    cart_items = []
+
+    for key, value in request.form.items():
+        if key.startswith('book_') and value.strip() and int(value) > 0:
+            book_id = int(key.split('_')[1])
+            qty = int(value)
+            cart_items.append((book_id, qty))
+
+    if not cart_items:
+        return "No books selected. <a href='/books?user_id={0}'>Go back</a>".format(user_id)
+
+    conn = get_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    books = []
+    total = 0
+
+    for book_id, qty in cart_items:
+        book = conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+        if book:
+            subtotal = qty * book['price']
+            total += subtotal
+            books.append({'book': book, 'qty': qty, 'subtotal': subtotal})
+
+    conn.close()
+
+    return render_template('cart.html', user=user, books=books, total=total)
+
+@app.route('/checkout', methods=['POST'])
+def checkout():
+    user_id = request.form.get('user_id')
+    conn = get_db_connection()
+
+    for key, value in request.form.items():
+        if key.startswith('book_') and int(value) > 0:
+            book_id = int(key.split('_')[1])
+            qty = int(value)
+
+           
+            conn.execute('INSERT INTO orders (user_id, book_id, quantity) VALUES (?, ?, ?)',
+                         (user_id, book_id, qty))
+
+            
+            conn.execute('UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?',
+                         (qty, book_id, qty))
+
+    conn.commit()
+    conn.close()
+
+    return "✅ Purchase complete! <a href='/books?user_id={0}'>Back to Books</a>".format(user_id)
+
+@app.route('/admin')
+def admin_dashboard():
+    user_id = request.args.get('user_id')
+    conn = get_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+
+    if not user or user['is_admin'] != 1:
+        conn.close()
+        return "Access denied."
+
+    books = conn.execute('SELECT * FROM books').fetchall()
+    users = conn.execute('SELECT * FROM users').fetchall()
+    orders = conn.execute('''
+        SELECT o.id, u.name AS customer, b.title, o.quantity
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        JOIN books b ON o.book_id = b.id
+        ORDER BY o.id DESC
+    ''').fetchall()
+
+    conn.close()
+    return render_template('admin.html', user=user, books=books, users=users, orders=orders)
+
+@app.route('/orders')
+def order_history():
+    user_id = request.args.get('user_id')
+    conn = get_db_connection()
+
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+
+    if not user:
+        conn.close()
+        return "User not found."
+
+    orders = conn.execute('''
+        SELECT o.id, b.title, o.quantity, b.price, (o.quantity * b.price) AS total
+        FROM orders o
+        JOIN books b ON o.book_id = b.id
+        WHERE o.user_id = ?
+        ORDER BY o.id DESC
+    ''', (user_id,)).fetchall()
+
+    conn.close()
+    return render_template('orders.html', user=user, orders=orders)
+
+# ----------------- MAIN ----------------- #
+if __name__ == '__main__':
+    app.run(debug=True)

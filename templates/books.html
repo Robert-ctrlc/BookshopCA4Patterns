@@ -1,24 +1,62 @@
 {% extends "layout.html" %}
 {% block content %}
   <h2>Welcome, {{ user['name'] }}!</h2>
-  <p>Sort by: 
-    <a href="{{ url_for('book_list', user_id=user['id'], sort_by='title') }}">Title</a> |
-    <a href="{{ url_for('book_list', user_id=user['id'], sort_by='price') }}">Price</a>
+
+  <form method="get" action="{{ url_for('book_list') }}" class="row g-2 mb-4">
+    <input type="hidden" name="user_id" value="{{ user['id'] }}">
+
+    <div class="col-md-3">
+      <input type="text" name="search" placeholder="Search title" class="form-control" value="{{ filters.search }}">
+    </div>
+    <div class="col-md-3">
+      <input type="text" name="author" placeholder="Author" class="form-control" value="{{ filters.author }}">
+    </div>
+    <div class="col-md-3">
+      <select name="category" class="form-select">
+        <option value="">All Categories</option>
+        {% for cat in categories %}
+          <option value="{{ cat['category'] }}" {% if filters.category == cat['category'] %}selected{% endif %}>{{ cat['category'] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3 d-grid">
+      <button type="submit" class="btn btn-primary">Filter</button>
+    </div>
+  </form>
+
+  <p>
+    Sort by: 
+    <a href="{{ url_for('book_list', user_id=user['id'], sort_by='title', search=filters.search, author=filters.author, category=filters.category) }}">Title</a> |
+    <a href="{{ url_for('book_list', user_id=user['id'], sort_by='price', search=filters.search, author=filters.author, category=filters.category) }}">Price</a>
   </p>
 
-  <div class="row">
-    {% for book in books %}
-      <div class="col-md-4">
-        <div class="card mb-3">
-          <img src="{{ book['image_url'] }}" class="card-img-top" alt="book cover">
-          <div class="card-body">
-            <h5 class="card-title">{{ book['title'] }}</h5>
-            <p class="card-text">Author: {{ book['author'] }}<br>
-               Price: €{{ book['price'] }}</p>
-            <a href="#" class="btn btn-sm btn-outline-primary">Add to Cart</a>
+  {% if user['is_admin'] %}
+    <a class="btn btn-warning mb-3" href="{{ url_for('admin_dashboard', user_id=user['id']) }}">Admin Dashboard</a>
+  {% endif %}
+
+  <a href="{{ url_for('order_history', user_id=user['id']) }}" class="btn btn-outline-secondary mb-3">My Orders</a>
+
+  <form action="{{ url_for('cart') }}" method="post">
+    <input type="hidden" name="user_id" value="{{ user['id'] }}">
+    <div class="row">
+      {% for book in books %}
+        <div class="col-md-4">
+          <div class="card mb-3">
+            <img src="{{ book['image_url'] }}" class="card-img-top" alt="book cover">
+            <div class="card-body">
+              <h5 class="card-title">{{ book['title'] }}</h5>
+              <p class="card-text">
+                Author: {{ book['author'] }}<br>
+                Category: {{ book['category'] }}<br>
+                Price: €{{ book['price'] }}<br>
+                In stock: {{ book['stock'] }}
+              </p>
+              <input type="number" name="book_{{ book['id'] }}" class="form-control mb-2" placeholder="Qty" min="0" max="{{ book['stock'] }}">
+            </div>
           </div>
         </div>
-      </div>
-    {% endfor %}
-  </div>
+      {% endfor %}
+    </div>
+    <button type="submit" class="btn btn-success">Add to Cart</button>
+  </form>
 {% endblock %}
