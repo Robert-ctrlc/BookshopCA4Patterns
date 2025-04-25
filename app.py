@@ -73,6 +73,7 @@ def book_list():
     search = request.args.get('search', '')
     author = request.args.get('author', '')
     category = request.args.get('category', '')
+    publisher = request.args.get('publisher', '')
 
     conn = get_db_connection()
     user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
@@ -89,6 +90,9 @@ def book_list():
     if category:
         query += ' AND category = ?'
         params.append(category)
+    if publisher:
+        query += ' AND publisher LIKE ?'
+        params.append(f'%{publisher}%')   
 
     query += f' ORDER BY {sort_by} ASC'
     books = conn.execute(query, params).fetchall()
@@ -114,6 +118,7 @@ def book_list():
     return render_template('books.html', books=books_with_ratings, user=user, categories=categories, filters={
         'search': search,
         'author': author,
+        'publisher': publisher,
         'category': category,
         'sort_by': sort_by
     })
