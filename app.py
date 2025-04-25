@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for
 from factories import BookFactory, UserFactory
+from strategies import TitleSortStrategy, PriceSortStrategy, AuthorSortStrategy, PublisherSortStrategy
+
 import sqlite3
 
 app = Flask(__name__)
@@ -69,10 +71,7 @@ def register():
 @app.route('/books')
 def book_list():
     user_id = request.args.get('user_id')
-
-    allowed_sort_fields = ['title', 'price', 'author', 'publisher']
-    if sort_by not in allowed_sort_fields:
-        sort_by = 'title'
+    sort_by = request.args.get('sort_by', 'title')
 
     search = request.args.get('search', '')
     author = request.args.get('author', '')
@@ -82,7 +81,6 @@ def book_list():
     conn = get_db_connection()
     row = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
     user = UserFactory.create_user_from_row(row) if row else None
-
 
     query = 'SELECT * FROM books WHERE 1=1'
     params = []
@@ -98,15 +96,21 @@ def book_list():
         params.append(f'%{category}%')
     if publisher:
         query += ' AND publisher LIKE ?'
-        params.append(f'%{publisher}%')   
+        params.append(f'%{publisher}%')
 
-    query += f' ORDER BY {sort_by} ASC'
-    books = conn.execute(query, params).fetchall()
+    strategies = {
+        'title': TitleSortStrategy(),
+        'price': PriceSortStrategy(),
+        'author': AuthorSortStrategy(),
+        'publisher': PublisherSortStrategy()
+    }
 
-    
+    sort_strategy = strategies.get(sort_by, TitleSortStrategy())
+    query += f' {sort_strategy.sort_query()}'
+
+    rows = conn.execute(query, params).fetchall()
     categories = conn.execute('SELECT DISTINCT category FROM books').fetchall()
 
-    
     ratings = {
         row['book_id']: row['avg']
         for row in conn.execute('SELECT book_id, AVG(rating) AS avg FROM reviews GROUP BY book_id').fetchall()
@@ -114,9 +118,8 @@ def book_list():
 
     conn.close()
 
-   
     books_with_ratings = []
-    for b in books:
+    for b in rows:
         b = dict(b)
         b['avg_rating'] = round(ratings.get(b['id'], 0), 1)
         books_with_ratings.append(b)
