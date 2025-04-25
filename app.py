@@ -2,14 +2,18 @@ from flask import Flask, render_template, request, redirect, url_for
 from factories import BookFactory, UserFactory
 from strategies import TitleSortStrategy, PriceSortStrategy, AuthorSortStrategy, PublisherSortStrategy
 from dao import BookDAO, UserDAO
+from builder import OrderBuilder
+from singleton import DatabaseConnection
+from proxy import AdminAccessProxy
+from templates_method import CheckoutProcess
 import sqlite3
+
+
 
 app = Flask(__name__)
 
 def get_db_connection():
-    conn = sqlite3.connect('books.db')
-    conn.row_factory = sqlite3.Row
-    return conn
+    return DatabaseConnection.get_instance().get_connection()
 
 @app.route('/')
 def home():
@@ -25,13 +29,14 @@ def login():
         conn = get_db_connection()
         user_dao = UserDAO(conn)
         user = user_dao.get_user_by_credentials(username, password)
-        conn.close()
+        
 
         if user:
+            conn.close()
             return redirect(url_for('book_list', user_id=user.id))
         else:
             error = "Invalid username or password."
-
+        conn.close()
     return render_template('login.html', error=error)
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -159,35 +164,42 @@ def cart():
         orders_to_next_reward=orders_to_next_reward if show_loyalty_hint else None
     )
 
+class StandardCheckout(CheckoutProcess):
+    def fetch_cart_items(self, form_data):
+        cart_items = []
+        for key, value in form_data.items():
+            if key.startswith('book_') and int(value) > 0:
+                book_id = int(key.split('_')[1])
+                qty = int(value)
+                cart_items.append((book_id, qty))
+        return cart_items
+
+    def process_items(self, items):
+        processed_items = []
+        for book_id, qty in items:
+            book = BookFactory.create_book_from_row(
+                self.conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
+            )
+            if book:
+                subtotal = book.price * qty
+                processed_items.append({'book': book, 'quantity': qty, 'subtotal': subtotal})
+        return processed_items
+
 @app.route('/checkout', methods=['POST'])
 def checkout():
     user_id = request.form.get('user_id')
     conn = get_db_connection()
 
-    total = 0
-    order_items = []
+    checkout_process = StandardCheckout(conn, user_id)
+    cart_items = checkout_process.fetch_cart_items(request.form)
+    order_items = checkout_process.process_items(cart_items)
+    total = checkout_process.calculate_totals(order_items)
 
-    for key, value in request.form.items():
-        if key.startswith('book_') and int(value) > 0:
-            book_id = int(key.split('_')[1])
-            qty = int(value)
-            book = BookFactory.create_book_from_row(
-                conn.execute('SELECT * FROM books WHERE id = ?', (book_id,)).fetchone()
-            )
-            if book:
-                subtotal = qty * book.price
-                total += subtotal
-                order_items.append((book_id, qty))
+    total, discount_amount = checkout_process.apply_discount(total)
 
-    discount_applied = total >= 100
-    discount_amount = 0
-    if discount_applied:
-        discount_amount = round(total * 0.10, 2)
-        total -= discount_amount
-
-    for book_id, qty in order_items:
-        conn.execute('INSERT INTO orders (user_id, book_id, quantity) VALUES (?, ?, ?)', (user_id, book_id, qty))
-        conn.execute('UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?', (qty, book_id, qty))
+    for item in order_items:
+        conn.execute('INSERT INTO orders (user_id, book_id, quantity) VALUES (?, ?, ?)', (user_id, item['book'].id, item['quantity']))
+        conn.execute('UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?', (item['quantity'], item['book'].id, item['quantity']))
 
     conn.commit()
 
@@ -202,7 +214,7 @@ def checkout():
     return render_template('checkout_success.html',
         user_id=user_id,
         total=total,
-        discount_applied=discount_applied,
+        discount_applied=(discount_amount > 0),
         discount_amount=discount_amount,
         loyalty_discount=loyalty_discount
     )
@@ -211,12 +223,14 @@ def checkout():
 def admin_dashboard():
     user_id = request.args.get('user_id')
     conn = get_db_connection()
-    user_dao = UserDAO(conn)
-    user = user_dao.get_user_by_id(user_id)
 
-    if not user or not user.is_admin:
+    access_proxy = AdminAccessProxy(conn)
+    if not access_proxy.is_admin(user_id):
         conn.close()
         return "Access denied."
+    
+    user_dao = UserDAO(conn)
+    user = user_dao.get_user_by_id(user_id) 
 
     books = conn.execute('SELECT * FROM books').fetchall()
     users = conn.execute('SELECT * FROM users').fetchall()
@@ -246,7 +260,7 @@ def admin_dashboard():
     conn.close()
 
     return render_template('admin.html',
-        user=user,
+        user=user,                   
         books=books,
         users=users,
         orders=orders,
@@ -255,7 +269,8 @@ def admin_dashboard():
         total_revenue=round(total_revenue, 2),
         total_users=total_users,
         avg_rating=round(avg_rating, 1),
-        best_seller=best_seller
+        best_seller=best_seller,
+        user_id=user_id
     )
 
 @app.route('/admin/add_book', methods=['GET', 'POST'])
